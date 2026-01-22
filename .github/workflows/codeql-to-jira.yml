@@ -20,28 +20,51 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          echo "🔍 Fetching CodeQL alerts for repository: ${{ github.repository }}"
+
           curl -s \
-          -H "Authorization: Bearer $GH_TOKEN" \
-          -H "Accept: application/vnd.github+json" \
-          https://api.github.com/repos/${{ github.repository }}/code-scanning/alerts?state=open \
-          > alerts.json
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/code-scanning/alerts?state=open \
+            > alerts.json
+
+          echo "📄 Alerts saved to alerts.json"
+          echo "📊 Total alerts found:"
+          jq 'length' alerts.json || echo "⚠️ Failed to count alerts"
 
       - name: Create Jira tickets
         run: |
-          jq -e 'type == "array"' alerts.json > /dev/null || exit 0
-      
+          echo "🚀 Starting Jira ticket creation step"
+
+          # Check if alerts.json is an array
+          if ! jq -e 'type == "array"' alerts.json > /dev/null; then
+            echo "ℹ️ alerts.json is not an array or empty. Exiting."
+            exit 0
+          fi
+
+          TOTAL_ALERTS=$(jq 'length' alerts.json)
+          echo "🔢 Processing $TOTAL_ALERTS alerts"
+
           jq -c '.[] | select(.rule != null)' alerts.json | while read alert; do
             id=$(echo "$alert" | jq -r '.number')
             title=$(echo "$alert" | jq -r '.rule.name // "CodeQL issue"')
             severity=$(echo "$alert" | jq -r '.rule.severity // "unknown"')
             file=$(echo "$alert" | jq -r '.most_recent_instance.location.path // "unknown file"')
             url=$(echo "$alert" | jq -r '.html_url')
-      
+
             summary="CodeQL #$id – $title ($file)"
-      
-            echo "Creating Jira ticket: $summary"
-      
-            curl -s -X POST \
+
+            echo "--------------------------------------------"
+            echo "📝 Creating Jira ticket"
+            echo "ID       : $id"
+            echo "Title    : $title"
+            echo "Severity : $severity"
+            echo "File     : $file"
+            echo "URL      : $url"
+            echo "Summary  : $summary"
+            echo "--------------------------------------------"
+
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
               -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
               -H "Content-Type: application/json" \
               https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue \
@@ -62,6 +85,16 @@ jobs:
                   },
                   \"issuetype\": { \"name\": \"Bug\" }
                 }
-              }"
+              }")
+
+            echo "$RESPONSE"
+
+            if echo "$RESPONSE" | grep -q "HTTP_STATUS:201"; then
+              echo "✅ Jira ticket created successfully"
+            else
+              echo "❌ Failed to create Jira ticket"
+            fi
+
           done
-      
+
+          echo "🎉 Jira ticket creation process completed"
