@@ -35,16 +35,15 @@ jobs:
       - name: Create Jira tickets
         run: |
           echo "🚀 Starting Jira ticket creation step"
-
-          # Check if alerts.json is an array
+      
           if ! jq -e 'type == "array"' alerts.json > /dev/null; then
             echo "ℹ️ alerts.json is not an array or empty. Exiting."
             exit 0
           fi
-
+      
           TOTAL_ALERTS=$(jq 'length' alerts.json)
           echo "🔢 Processing $TOTAL_ALERTS alerts"
-
+      
           jq -c '.[] | select(.rule != null) | @base64' alerts.json | while read -r encoded; do
             decode() {
               echo "$encoded" | base64 --decode | jq -r "$1"
@@ -57,7 +56,7 @@ jobs:
             url=$(decode '.html_url')
       
             summary="CodeQL #$id – $title ($file)"
-
+      
             echo "--------------------------------------------"
             echo "📝 Creating Jira ticket"
             echo "ID       : $id"
@@ -67,38 +66,43 @@ jobs:
             echo "URL      : $url"
             echo "Summary  : $summary"
             echo "--------------------------------------------"
-
+      
             RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
               -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
               -H "Content-Type: application/json" \
               https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue \
-              -d "{
-                \"fields\": {
-                  \"project\": { \"key\": \"${{ secrets.JIRA_PROJECT_KEY }}\" },
-                  \"summary\": \"$summary\",
-                  \"description\": {
-                    \"type\": \"doc\",
-                    \"version\": 1,
-                    \"content\": [{
-                      \"type\": \"paragraph\",
-                      \"content\": [{
-                        \"type\": \"text\",
-                        \"text\": \"Severity: $severity\nFile: $file\n$url\"
-                      }]
-                    }]
+              -d @- <<EOF
+              {
+                "fields": {
+                  "project": { "key": "${{ secrets.JIRA_PROJECT_KEY }}" },
+                  "summary": "$summary",
+                  "description": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Severity: $severity\nFile: $file\n$url"
+                          }
+                        ]
+                      }
+                    ]
                   },
-                  \"issuetype\": { \"name\": \"Bug\" }
+                  "issuetype": { "name": "Bug" }
                 }
-              }")
-
-            echo "$RESPONSE"
-
+              }
+              EOF
+              )
+      
             if echo "$RESPONSE" | grep -q "HTTP_STATUS:201"; then
               echo "✅ Jira ticket created successfully"
             else
               echo "❌ Failed to create Jira ticket"
+              echo "$RESPONSE"
             fi
-
           done
-
+      
           echo "🎉 Jira ticket creation process completed"
