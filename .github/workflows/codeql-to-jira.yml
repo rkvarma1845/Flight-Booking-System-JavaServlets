@@ -59,7 +59,16 @@ jobs:
             severity=$(decode '.rule.security_severity_level // "unknown"' | tr '[:lower:]' '[:upper:]')
             status=$(decode '.state')
             cwe=$(decode '[.rule.tags[]? | select(startswith("cwe-"))] | map(ascii_upcase) | join(", ")')
-            help=$(decode '.rule.help.text // "See GitHub alert for remediation guidance."')
+            help=$(decode '
+              if (.rule.help | type) == "object" then
+                .rule.help.text
+              elif (.rule.help | type) == "string" then
+                .rule.help
+              else
+                "See GitHub alert for remediation guidance."
+              end
+            ')
+
             url=$(decode '.html_url')
 
       
