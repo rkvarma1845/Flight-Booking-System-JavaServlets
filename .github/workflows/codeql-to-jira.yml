@@ -44,7 +44,7 @@ jobs:
           TOTAL_ALERTS=$(jq 'length' alerts.json)
           echo "🔢 Processing $TOTAL_ALERTS alerts"
       
-          jq -c '.[] | select(.rule != null) | @base64' alerts.json | while read -r encoded; do
+          jq -r '.[] | select(.rule != null) | @base64' alerts.json | while read -r encoded; do
             decode() {
               echo "$encoded" | base64 --decode | jq -r "$1"
             }
