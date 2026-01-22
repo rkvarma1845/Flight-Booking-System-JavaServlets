@@ -49,7 +49,7 @@ jobs:
               echo "$encoded" | base64 --decode | jq -r "$1"
             }
       
-            # id=$(decode '.number')
+            id=$(decode '.number')
             # title=$(decode '.rule.name // "CodeQL issue"')
             # severity=$(decode '.rule.severity // "unknown"')
             # file=$(decode '.most_recent_instance.location.path // "unknown file"')
@@ -86,19 +86,18 @@ jobs:
       
             JSON_PAYLOAD=$(jq -n \
               --arg project "${{ secrets.JIRA_PROJECT_KEY }}" \
-              --arg summary "$title" \
+              --arg summary "$summary" \
               --arg severity "$severity" \
               --arg status "$status" \
               --arg cwe "$cwe" \
-              --arg help "$help" \
               --arg file "$file" \
               --arg url "$url" \
-              --arg priority "$PRIORITY" \
+              --arg help "$help" \
               '{
                 fields: {
                   project: { key: $project },
                   summary: $summary,
-                  priority: { name: $priority },
+                  issuetype: { name: "Bug" },
                   description: {
                     type: "doc",
                     version: 1,
@@ -106,32 +105,19 @@ jobs:
                       {
                         type: "paragraph",
                         content: [
-                          { "type": "text", "text": "Severity: " },
-                          { "type": "text", "text": $severity, "marks": [{ "type": "strong" }] }
+                          { "type": "text", "text": ("Vulnerability: " + $summary) }
                         ]
                       },
                       {
                         type: "paragraph",
                         content: [
-                          { "type": "text", "text": "Status: " + $status }
+                          { "type": "text", "text": ("Severity: " + $severity) }
                         ]
                       },
                       {
                         type: "paragraph",
                         content: [
-                          { "type": "text", "text": "CWE: " + ($cwe | select(length > 0) // "N/A") }
-                        ]
-                      },
-                      {
-                        type: "paragraph",
-                        content: [
-                          { "type": "text", "text": "File: " + $file }
-                        ]
-                      },
-                      {
-                        type: "paragraph",
-                        content: [
-                          { "type": "text", "text": "Remediation:\n" + $help }
+                          { "type": "text", "text": ("Status: " + $status) }
                         ]
                       },
                       {
@@ -139,16 +125,33 @@ jobs:
                         content: [
                           {
                             "type": "text",
-                            "text": "View GitHub Alert",
-                            "marks": [
-                              { "type": "link", "attrs": { "href": $url } }
-                            ]
+                            "text": (
+                              "CWE: " +
+                              (if ($cwe | length) > 0 then $cwe else "N/A" end)
+                            )
                           }
+                        ]
+                      },
+                      {
+                        type: "paragraph",
+                        content: [
+                          { "type": "text", "text": ("File: " + $file) }
+                        ]
+                      },
+                      {
+                        type: "paragraph",
+                        content: [
+                          { "type": "text", "text": ("Remediation:\n" + $help) }
+                        ]
+                      },
+                      {
+                        type: "paragraph",
+                        content: [
+                          { "type": "text", "text": $url }
                         ]
                       }
                     ]
-                  },
-                  issuetype: { name: "Bug" }
+                  }
                 }
               }'
             )
