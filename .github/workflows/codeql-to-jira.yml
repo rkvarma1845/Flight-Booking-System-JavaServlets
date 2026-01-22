@@ -35,16 +35,17 @@ jobs:
       - name: Collect Jira ticket summaries
         id: collect_jira_summaries
         run: |
-          echo "📥 Fetching existing Jira issues"
+          echo "📥 Fetching existing Jira issues (new Jira API)"
       
-          SEARCH_RESPONSE=$(curl -s \
+          SEARCH_RESPONSE=$(curl -s -X POST \
             -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-            -H "Accept: application/json" \
-            -G \
-            --data-urlencode "jql=project=${{ secrets.JIRA_PROJECT_KEY }}" \
-            --data-urlencode "fields=summary" \
-            --data-urlencode "maxResults=1000" \
-            "https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/search")
+            -H "Content-Type: application/json" \
+            "https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/search/jql" \
+            -d '{
+              "jql": "project = '"${{ secrets.JIRA_PROJECT_KEY }}"'",
+              "fields": ["summary"],
+              "maxResults": 1000
+            }')
       
           echo "🔍 Raw Jira response:"
           echo "$SEARCH_RESPONSE" | jq .
