@@ -65,6 +65,7 @@ jobs:
             ')
       
             summary="CodeQL #$id – $title ($file)"
+            title_with_id="Code scanning alert #$id – $title"
       
             echo "--------------------------------------------"
             echo "📝 Creating Jira ticket"
@@ -80,7 +81,7 @@ jobs:
       
             JSON_PAYLOAD=$(jq -n \
               --arg project "${{ secrets.JIRA_PROJECT_KEY }}" \
-              --arg title "$title" \
+              --arg title "$title_with_id" \
               --arg summary "$summary" \
               --arg severity "$severity" \
               --arg status "$status" \
@@ -90,7 +91,7 @@ jobs:
               '{
                 fields: {
                   project: { key: $project },
-                  summary: $title,
+                  summary: $title_with_id,
                   issuetype: { name: "Bug" },
                   description: {
                     type: "doc",
