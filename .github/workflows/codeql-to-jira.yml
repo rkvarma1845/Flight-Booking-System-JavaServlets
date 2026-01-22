@@ -50,23 +50,13 @@ jobs:
           echo "🔍 Raw Jira response:"
           echo "$SEARCH_RESPONSE" | jq .
       
-          TOTAL=$(echo "$SEARCH_RESPONSE" | jq -r '.total // 0')
-          echo "📊 Total issues found: $TOTAL"
-      
-          if [ "$TOTAL" -eq 0 ]; then
+          ISSUE_COUNT=$(echo "$SEARCH_RESPONSE" | jq '.issues | length')
+
+          if [ "$ISSUE_COUNT" -eq 0 ]; then
             echo "ℹ️ No Jira issues found"
-            touch jira_summaries.txt
+            : > jira_summaries.txt
           else
             echo "$SEARCH_RESPONSE" \
-              | jq -r '.issues[]?.fields.summary' \
+              | jq -r '.issues[].fields.summary' \
               > jira_summaries.txt
           fi
-      
-          echo "📝 Collected summaries:"
-          cat jira_summaries.txt || true
-      
-          {
-            echo "summaries<<EOF"
-            cat jira_summaries.txt || true
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
