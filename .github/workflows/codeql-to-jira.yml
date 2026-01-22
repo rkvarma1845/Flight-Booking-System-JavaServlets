@@ -55,6 +55,14 @@ jobs:
             status=$(decode '.state')
             file=$(decode '.most_recent_instance.location.path // "unknown file"')
             url=$(decode '.html_url')
+
+            cwe=$(decode '
+              [.rule.tags[]?
+               | select(test("cwe-"))
+               | sub(".*/"; "")
+               | ascii_upcase]
+              | join(", ")
+            ')
       
             summary="CodeQL #$id – $title ($file)"
       
@@ -64,6 +72,7 @@ jobs:
             echo "Title    : $title"
             echo "Severity : $severity"
             echo "Status   : $status"
+            echo "CWE     : $cwe"
             echo "File     : $file"
             echo "URL      : $url"
             echo "Summary  : $summary"
@@ -71,6 +80,7 @@ jobs:
       
             JSON_PAYLOAD=$(jq -n \
               --arg project "${{ secrets.JIRA_PROJECT_KEY }}" \
+              --arg title "$title" \
               --arg summary "$summary" \
               --arg severity "$severity" \
               --arg status "$status" \
@@ -80,7 +90,7 @@ jobs:
               '{
                 fields: {
                   project: { key: $project },
-                  summary: $summary,
+                  summary: $title,
                   issuetype: { name: "Bug" },
                   description: {
                     type: "doc",
@@ -96,6 +106,23 @@ jobs:
                         type: "paragraph",
                         content: [
                           { "type": "text", "text": ("Severity: " + $severity) }
+                        ]
+                      },
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          { "type": "text", "text": "GitHub uses " },
+                          {
+                            "type": "text",
+                            "text": "Common Vulnerability Scoring System (CVSS)",
+                            "marks": [
+                              {
+                                "type": "link",
+                                "attrs": { "href": "https://www.atlassian.com/trust/security/security-severity-levels" }
+                              }
+                            ]
+                          },
+                          { "type": "text", "text": " data to calculate security severity." }
                         ]
                       },
                       {
