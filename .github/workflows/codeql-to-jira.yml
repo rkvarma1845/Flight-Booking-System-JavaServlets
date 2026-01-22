@@ -81,7 +81,7 @@ jobs:
       
             JSON_PAYLOAD=$(jq -n \
               --arg project "${{ secrets.JIRA_PROJECT_KEY }}" \
-              --arg title "$title_with_id" \
+              --arg title_with_id "$title_with_id" \
               --arg summary "$summary" \
               --arg severity "$severity" \
               --arg status "$status" \
