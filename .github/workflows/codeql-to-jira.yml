@@ -51,12 +51,9 @@ jobs:
           echo "$SEARCH_RESPONSE" | jq .
       
           ISSUE_COUNT=$(echo "$SEARCH_RESPONSE" | jq '.issues | length')
+          echo "$ISSUE_COUNT"
 
-          if [ "$ISSUE_COUNT" -eq 0 ]; then
-            echo "ℹ️ No Jira issues found"
-            : > jira_summaries.txt
-          else
-            echo "$SEARCH_RESPONSE" \
-              | jq -r '.issues[].fields.summary' \
-              > jira_summaries.txt
-          fi
+          SUMMARY_LIST=$(echo "$SEARCH_RESPONSE" | jq -r '.issues[].fields.summary')
+          echo "📋 Jira summaries (one per line):"
+          echo "$SUMMARY_LIST"
+
