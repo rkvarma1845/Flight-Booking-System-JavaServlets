@@ -39,26 +39,33 @@ jobs:
       
           SEARCH_RESPONSE=$(curl -s \
             -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            -H "Accept: application/json" \
             -G \
-            --data-urlencode "jql=project=${{ secrets.JIRA_PROJECT_KEY }} ORDER BY created DESC" \
+            --data-urlencode "jql=project=${{ secrets.JIRA_PROJECT_KEY }}" \
             --data-urlencode "fields=summary" \
             --data-urlencode "maxResults=1000" \
             "https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/search")
       
-          echo "📊 Total issues found:"
-          echo "$SEARCH_RESPONSE" | jq '.total'
+          echo "🔍 Raw Jira response:"
+          echo "$SEARCH_RESPONSE" | jq .
       
-          # Extract summaries into a list
-          echo "$SEARCH_RESPONSE" \
-            | jq -r '.issues[].fields.summary' \
-            > jira_summaries.txt
+          TOTAL=$(echo "$SEARCH_RESPONSE" | jq -r '.total // 0')
+          echo "📊 Total issues found: $TOTAL"
+      
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "ℹ️ No Jira issues found"
+            touch jira_summaries.txt
+          else
+            echo "$SEARCH_RESPONSE" \
+              | jq -r '.issues[]?.fields.summary' \
+              > jira_summaries.txt
+          fi
       
           echo "📝 Collected summaries:"
-          cat jira_summaries.txt
+          cat jira_summaries.txt || true
       
-          # Export as multiline output (usable in next steps)
           {
             echo "summaries<<EOF"
-            cat jira_summaries.txt
+            cat jira_summaries.txt || true
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
