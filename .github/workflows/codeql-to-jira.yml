@@ -50,27 +50,11 @@ jobs:
             }
       
             id=$(decode '.number')
-            # title=$(decode '.rule.name // "CodeQL issue"')
-            # severity=$(decode '.rule.severity // "unknown"')
-            # file=$(decode '.most_recent_instance.location.path // "unknown file"')
-            # url=$(decode '.html_url')
-
             title=$(decode '.rule.description // .rule.name')
             severity=$(decode '.rule.security_severity_level // "unknown"' | tr '[:lower:]' '[:upper:]')
             status=$(decode '.state')
-            cwe=$(decode '[.rule.tags[]? | select(startswith("cwe-"))] | map(ascii_upcase) | join(", ")')
-            help=$(decode '
-              if (.rule.help | type) == "object" then
-                .rule.help.text
-              elif (.rule.help | type) == "string" then
-                .rule.help
-              else
-                "See GitHub alert for remediation guidance."
-              end
-            ')
-
+            file=$(decode '.most_recent_instance.location.path // "unknown file"')
             url=$(decode '.html_url')
-
       
             summary="CodeQL #$id – $title ($file)"
       
@@ -79,6 +63,7 @@ jobs:
             echo "ID       : $id"
             echo "Title    : $title"
             echo "Severity : $severity"
+            echo "Status   : $status"
             echo "File     : $file"
             echo "URL      : $url"
             echo "Summary  : $summary"
@@ -92,7 +77,6 @@ jobs:
               --arg cwe "$cwe" \
               --arg file "$file" \
               --arg url "$url" \
-              --arg help "$help" \
               '{
                 fields: {
                   project: { key: $project },
@@ -126,7 +110,7 @@ jobs:
                           {
                             "type": "text",
                             "text": (
-                              "CWE: " +
+                              "Weaknesses: " +
                               (if ($cwe | length) > 0 then $cwe else "N/A" end)
                             )
                           }
@@ -139,15 +123,28 @@ jobs:
                         ]
                       },
                       {
-                        type: "paragraph",
-                        content: [
-                          { "type": "text", "text": ("Remediation:\n" + $help) }
-                        ]
-                      },
-                      {
-                        type: "paragraph",
-                        content: [
-                          { "type": "text", "text": $url }
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Visit the vulnerability’s "
+                          },
+                          {
+                            "type": "text",
+                            "text": "code scanning alert page in GitHub",
+                            "marks": [
+                              {
+                                "type": "link",
+                                "attrs": {
+                                  "href": $url
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "type": "text",
+                            "text": " for impact, a recommendation, and a relevant example."
+                          }
                         ]
                       }
                     ]
