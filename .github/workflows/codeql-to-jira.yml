@@ -47,13 +47,193 @@ jobs:
               "maxResults": 1000
             }')
       
-          echo "🔍 Raw Jira response:"
-          echo "$SEARCH_RESPONSE" | jq .
+          # echo "🔍 Raw Jira response:"
+          # echo "$SEARCH_RESPONSE" | jq .
       
-          ISSUE_COUNT=$(echo "$SEARCH_RESPONSE" | jq '.issues | length')
-          echo "$ISSUE_COUNT"
+          # ISSUE_COUNT=$(echo "$SEARCH_RESPONSE" | jq '.issues | length')
+          # echo "$ISSUE_COUNT"
 
           SUMMARY_LIST=$(echo "$SEARCH_RESPONSE" | jq -r '.issues[].fields.summary')
-          echo "📋 Jira summaries (one per line):"
-          echo "$SUMMARY_LIST"
+          # echo "📋 Jira summaries (one per line):"
+          # echo "$SUMMARY_LIST"
 
+          # Export to next steps
+          echo "SUMMARY_LIST<<EOF" >> $GITHUB_ENV
+          echo "$SUMMARY_LIST" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+
+      - name: Create Jira tickets
+        run: |
+          echo "🚀 Starting Jira ticket creation step"
+      
+          if ! jq -e 'type == "array"' alerts.json > /dev/null; then
+            echo "ℹ️ alerts.json is not an array or empty. Exiting."
+            exit 0
+          fi
+      
+          TOTAL_ALERTS=$(jq 'length' alerts.json)
+          echo "🔢 Processing $TOTAL_ALERTS alerts"
+      
+          jq -r '.[] | select(.rule != null) | @base64' alerts.json | while read -r encoded; do
+            decode() {
+              echo "$encoded" | base64 --decode | jq -r "$1"
+            }
+      
+            id=$(decode '.number')
+            title=$(decode '.rule.description // .rule.name')
+            severity=$(decode '.rule.security_severity_level // "unknown"' | tr '[:lower:]' '[:upper:]')
+            status=$(decode '.state')
+            file=$(decode '.most_recent_instance.location.path // "unknown file"')
+            url=$(decode '.html_url')
+
+            cwe=$(decode '
+              [.rule.tags[]?
+               | select(test("cwe-"))
+               | sub(".*/"; "")
+               | ascii_upcase]
+              | join(", ")
+            ')
+      
+            summary="CodeQL #$id – $title ($file)"
+            title_with_id="Code scanning alert #$id – $title"
+
+            echo "🔍 Checking: $title_with_id"
+            if echo "$SUMMARY_LIST" | grep -Fxq "$title_with_id"; then
+              echo "⛔ Ticket already exists. Skipping this alert."
+              continue
+            fi
+      
+            echo "--------------------------------------------"
+            echo "📝 Creating Jira ticket"
+            echo "ID       : $id"
+            echo "Title    : $title"
+            echo "Severity : $severity"
+            echo "Status   : $status"
+            echo "CWE     : $cwe"
+            echo "File     : $file"
+            echo "URL      : $url"
+            echo "Summary  : $summary"
+            echo "--------------------------------------------"
+      
+            JSON_PAYLOAD=$(jq -n \
+              --arg project "${{ secrets.JIRA_PROJECT_KEY }}" \
+              --arg title_with_id "$title_with_id" \
+              --arg summary "$summary" \
+              --arg severity "$severity" \
+              --arg status "$status" \
+              --arg cwe "$cwe" \
+              --arg file "$file" \
+              --arg url "$url" \
+              '{
+                fields: {
+                  project: { key: $project },
+                  summary: $title_with_id,
+                  issuetype: { name: "Bug" },
+                  description: {
+                    type: "doc",
+                    version: 1,
+                    content: [
+                      {
+                        type: "paragraph",
+                        content: [
+                          { "type": "text", "text": ("Vulnerability: " + $summary) }
+                        ]
+                      },
+                      {
+                        type: "paragraph",
+                        content: [
+                          { "type": "text", "text": ("Severity: " + $severity) }
+                        ]
+                      },
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          { "type": "text", "text": "GitHub uses " },
+                          {
+                            "type": "text",
+                            "text": "Common Vulnerability Scoring System (CVSS)",
+                            "marks": [
+                              {
+                                "type": "link",
+                                "attrs": { "href": "https://www.atlassian.com/trust/security/security-severity-levels" }
+                              }
+                            ]
+                          },
+                          { "type": "text", "text": " data to calculate security severity." }
+                        ]
+                      },
+                      {
+                        type: "paragraph",
+                        content: [
+                          { "type": "text", "text": ("Status: " + $status) }
+                        ]
+                      },
+                      {
+                        type: "paragraph",
+                        content: [
+                          {
+                            "type": "text",
+                            "text": (
+                              "Weaknesses: " +
+                              (if ($cwe | length) > 0 then $cwe else "N/A" end)
+                            )
+                          }
+                        ]
+                      },
+                      {
+                        type: "paragraph",
+                        content: [
+                          { "type": "text", "text": ("File: " + $file) }
+                        ]
+                      },
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {
+                            "type": "text",
+                            "text": "Visit the vulnerability’s "
+                          },
+                          {
+                            "type": "text",
+                            "text": "code scanning alert page in GitHub",
+                            "marks": [
+                              {
+                                "type": "link",
+                                "attrs": {
+                                  "href": $url
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "type": "text",
+                            "text": " for impact, a recommendation, and a relevant example."
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }'
+            )
+
+            
+            RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
+              -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue \
+              -d "$JSON_PAYLOAD"
+            )
+
+      
+            if echo "$RESPONSE" | grep -q "HTTP_STATUS:201"; then
+              echo "✅ Jira ticket created successfully"
+            else
+              echo "❌ Failed to create Jira ticket"
+              echo "$RESPONSE"
+            fi
+          done
+      
+          echo "🎉 Jira ticket creation process completed"
+      
