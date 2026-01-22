@@ -78,14 +78,25 @@ jobs:
             # 🔍 CHECK IF JIRA TICKET ALREADY EXISTS
             echo "🔍 Checking for existing Jira ticket..."
 
+            # SEARCH_RESPONSE=$(curl -s \
+            #   -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            #   -G \
+            #   --data-urlencode "jql=project=${{ secrets.JIRA_PROJECT_KEY }} AND summary~\"Code scanning alert #$id\"" \
+            #   https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/search \
+            #   -H "Content-Type: application/json"
+            # )
+
+            # EXISTING_COUNT=$(echo "$SEARCH_RESPONSE" | jq '.total')
+
+            JQL="project=${{ secrets.JIRA_PROJECT_KEY }} AND summary=\"${title_with_id}\""
+            
             SEARCH_RESPONSE=$(curl -s \
               -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
-              -G \
-              --data-urlencode "jql=project=${{ secrets.JIRA_PROJECT_KEY }} AND summary~\"Code scanning alert #$id\"" \
-              https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/search \
-              -H "Content-Type: application/json"
-            )
-
+              -H "Content-Type: application/json" \
+              --get \
+              --data-urlencode "jql=$JQL" \
+              "https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/search")
+            
             EXISTING_COUNT=$(echo "$SEARCH_RESPONSE" | jq '.total')
 
             if [[ "$EXISTING_COUNT" -gt 0 ]]; then
