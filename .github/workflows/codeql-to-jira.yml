@@ -45,13 +45,17 @@ jobs:
           TOTAL_ALERTS=$(jq 'length' alerts.json)
           echo "🔢 Processing $TOTAL_ALERTS alerts"
 
-          jq -c '.[] | select(.rule != null)' alerts.json | while read alert; do
-            id=$(echo "$alert" | jq -r '.number')
-            title=$(echo "$alert" | jq -r '.rule.name // "CodeQL issue"')
-            severity=$(echo "$alert" | jq -r '.rule.severity // "unknown"')
-            file=$(echo "$alert" | jq -r '.most_recent_instance.location.path // "unknown file"')
-            url=$(echo "$alert" | jq -r '.html_url')
-
+          jq -c '.[] | select(.rule != null) | @base64' alerts.json | while read -r encoded; do
+            decode() {
+              echo "$encoded" | base64 --decode | jq -r "$1"
+            }
+      
+            id=$(decode '.number')
+            title=$(decode '.rule.name // "CodeQL issue"')
+            severity=$(decode '.rule.severity // "unknown"')
+            file=$(decode '.most_recent_instance.location.path // "unknown file"')
+            url=$(decode '.html_url')
+      
             summary="CodeQL #$id – $title ($file)"
 
             echo "--------------------------------------------"
