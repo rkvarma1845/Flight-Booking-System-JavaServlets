@@ -35,20 +35,20 @@ jobs:
       - name: Create Jira tickets
         run: |
           echo "🚀 Starting Jira ticket creation step"
-      
+
           if ! jq -e 'type == "array"' alerts.json > /dev/null; then
             echo "ℹ️ alerts.json is not an array or empty. Exiting."
             exit 0
           fi
-      
+
           TOTAL_ALERTS=$(jq 'length' alerts.json)
           echo "🔢 Processing $TOTAL_ALERTS alerts"
-      
+
           jq -r '.[] | select(.rule != null) | @base64' alerts.json | while read -r encoded; do
             decode() {
               echo "$encoded" | base64 --decode | jq -r "$1"
             }
-      
+
             id=$(decode '.number')
             title=$(decode '.rule.description // .rule.name')
             severity=$(decode '.rule.security_severity_level // "unknown"' | tr '[:lower:]' '[:upper:]')
@@ -63,22 +63,38 @@ jobs:
                | ascii_upcase]
               | join(", ")
             ')
-      
-            summary="CodeQL #$id – $title ($file)"
+
             title_with_id="Code scanning alert #$id – $title"
-      
+            summary="CodeQL #$id – $title ($file)"
+
             echo "--------------------------------------------"
-            echo "📝 Creating Jira ticket"
             echo "ID       : $id"
             echo "Title    : $title"
             echo "Severity : $severity"
             echo "Status   : $status"
-            echo "CWE     : $cwe"
-            echo "File     : $file"
-            echo "URL      : $url"
-            echo "Summary  : $summary"
+            echo "CWE      : $cwe"
             echo "--------------------------------------------"
-      
+
+            # 🔍 CHECK IF JIRA TICKET ALREADY EXISTS
+            echo "🔍 Checking for existing Jira ticket..."
+
+            SEARCH_RESPONSE=$(curl -s \
+              -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+              -G \
+              --data-urlencode "jql=project=${{ secrets.JIRA_PROJECT_KEY }} AND summary~\"Code scanning alert #$id\"" \
+              https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/search \
+              -H "Content-Type: application/json"
+            )
+
+            EXISTING_COUNT=$(echo "$SEARCH_RESPONSE" | jq '.total')
+
+            if [[ "$EXISTING_COUNT" -gt 0 ]]; then
+              echo "⚠️ Jira ticket already exists for alert #$id. Skipping."
+              continue
+            fi
+
+            echo "🆕 No existing ticket found. Creating Jira issue..."
+
             JSON_PAYLOAD=$(jq -n \
               --arg project "${{ secrets.JIRA_PROJECT_KEY }}" \
               --arg title_with_id "$title_with_id" \
@@ -110,8 +126,8 @@ jobs:
                         ]
                       },
                       {
-                        "type": "paragraph",
-                        "content": [
+                        type: "paragraph",
+                        content: [
                           { "type": "text", "text": "GitHub uses " },
                           {
                             "type": "text",
@@ -119,7 +135,9 @@ jobs:
                             "marks": [
                               {
                                 "type": "link",
-                                "attrs": { "href": "https://www.atlassian.com/trust/security/security-severity-levels" }
+                                "attrs": {
+                                  "href": "https://www.atlassian.com/trust/security/security-severity-levels"
+                                }
                               }
                             ]
                           },
@@ -151,21 +169,16 @@ jobs:
                         ]
                       },
                       {
-                        "type": "paragraph",
-                        "content": [
-                          {
-                            "type": "text",
-                            "text": "Visit the vulnerability’s "
-                          },
+                        type: "paragraph",
+                        content: [
+                          { "type": "text", "text": "Visit the vulnerability’s " },
                           {
                             "type": "text",
                             "text": "code scanning alert page in GitHub",
                             "marks": [
                               {
                                 "type": "link",
-                                "attrs": {
-                                  "href": $url
-                                }
+                                "attrs": { "href": $url }
                               }
                             ]
                           },
@@ -181,7 +194,6 @@ jobs:
               }'
             )
 
-            
             RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST \
               -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
               -H "Content-Type: application/json" \
@@ -189,7 +201,6 @@ jobs:
               -d "$JSON_PAYLOAD"
             )
 
-      
             if echo "$RESPONSE" | grep -q "HTTP_STATUS:201"; then
               echo "✅ Jira ticket created successfully"
             else
@@ -197,5 +208,5 @@ jobs:
               echo "$RESPONSE"
             fi
           done
-      
+
           echo "🎉 Jira ticket creation process completed"
