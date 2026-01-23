@@ -2,9 +2,8 @@ name: Dependabot Findings to Jira
 
 on:
   workflow_run:
-    workflows: ["CodeQL Findings to Jira"]
-    types:
-      - completed
+    workflows: ["CodeQL"]
+    types: [completed]
 
 permissions:
   security-events: read
