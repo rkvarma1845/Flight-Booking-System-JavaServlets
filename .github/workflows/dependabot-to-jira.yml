@@ -32,21 +32,31 @@ jobs:
           jq 'length' alerts.json || echo "⚠️ Failed to count alerts"
 
       - name: Collect Jira ticket summaries
+        id: collect_jira_summaries
         run: |
-          echo "📥 Fetching existing Jira issues"
-
+          echo "📥 Fetching existing Jira issues (new Jira API)"
+      
           SEARCH_RESPONSE=$(curl -s -X POST \
             -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            "https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/search" \
+            "https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/search/jql" \
             -d '{
               "jql": "project = '"${{ secrets.JIRA_PROJECT_KEY }}"'",
               "fields": ["summary"],
               "maxResults": 1000
             }')
+      
+          # echo "🔍 Raw Jira response:"
+          # echo "$SEARCH_RESPONSE" | jq .
+      
+          # ISSUE_COUNT=$(echo "$SEARCH_RESPONSE" | jq '.issues | length')
+          # echo "$ISSUE_COUNT"
 
           SUMMARY_LIST=$(echo "$SEARCH_RESPONSE" | jq -r '.issues[].fields.summary')
+          # echo "📋 Jira summaries (one per line):"
+          # echo "$SUMMARY_LIST"
 
+          # Export to next steps
           echo "SUMMARY_LIST<<EOF" >> $GITHUB_ENV
           echo "$SUMMARY_LIST" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
